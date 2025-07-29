@@ -1,0 +1,100 @@
+import { initDB } from "./db"; 
+import { Router } from "express";
+import  jwt  from "jsonwebtoken";
+import bcrypt from 'bcryptjs';
+import dotenv from 'dotenv';
+
+dotenv.config();
+const SECRET : string | undefined = process.env.JWT_SECRET || 'fallback';
+const router : Router = Router();
+
+const auth = async (req:any, res:any, next: any) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.sendStatus(401);
+    try {
+        req.user = jwt.verify(token, SECRET);
+        next();
+    } catch {
+        res.sendStatus(403);
+    }
+}
+
+router.get('/cuts/:date', async (req, res) => {
+    const db = await initDB();
+    const date = req.params.date;
+
+    const day : Date = new Date(date);
+    const day_start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
+    const day_end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+
+    const token : string | undefined = req.headers.authorization?.split(' ')[1];
+    let isAuth : boolean = false;
+    
+    if (token) {
+        try {
+            const decode : any = jwt.verify(token, SECRET);
+            isAuth = true;
+        } catch (err) {
+            console.warn('JWT Error');
+        }
+    } 
+
+    const cuts = isAuth
+        ? await db.all(
+            `SELECT id, name, timestamp_start, timestamp_end, clients, state FROM events 
+            WHERE timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
+        [day_start.toISOString(), day_end.toISOString()]
+        )
+        : await db.all(
+            `SELECT id, timestamp_start, timestamp_end, clients, state FROM events 
+            WHERE state = 0 AND timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
+        [day_start.toISOString(), day_end.toISOString()]
+        );
+
+    res.status(200).json(cuts);
+});
+
+
+router.post('/cuts', async (req, res) => {
+    const {name, email, timestamp_start, timestamp_end, clients, comment} = req.body;
+    const db = await initDB();
+
+    const event_start = new Date(timestamp_start);
+    const event_end = new Date(timestamp_end);
+
+    const day_start = new Date(event_start.getFullYear(), event_start.getMonth(), event_start.getDate(), 0, 0, 0);
+    const day_end = new Date(event_start.getFullYear(), event_start.getMonth(), event_start.getDate(), 23, 59, 59);
+
+
+    const overlap = await db.all(
+        `SELECT * FROM events
+        WHERE timestamp_start BETWEEN ? AND ?
+        AND datetime(timestamp_start) < ?
+        AND datetime(timestamp_end) > ?`,
+        [
+            day_start.toISOString(),
+            day_end.toISOString(),
+            event_end.toISOString(),
+            event_start.toISOString()
+        ]
+    );    
+
+    if (overlap.length > 0){
+        return res.status(409).json({ message: 'Overlapping appointment exists on this day.' });
+    }
+
+    await db.run(
+        `INSERT INTO events (name, email, timestamp_start, timestamp_end, clients, comment, state)
+         VALUES(?,?,?,?,?,?,?)`,
+         [name, email, timestamp_start, timestamp_end, clients, comment, 0]
+    );
+
+
+    res.status(201).json({message: 'Event created successfully.'});
+
+
+});
+
+
+export {router as eventRoutes};
+

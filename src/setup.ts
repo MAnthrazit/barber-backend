@@ -13,9 +13,9 @@ import { initDB } from "./db";
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
             email TEXT,
-            timestanp TEXT,
-            duration INTEGER,
-            count INTEGER,
+            timestamp_start TEXT,
+            timestamp_end TEXT,
+            clients INTEGER,
             comment TEXT,
             state INTEGER
         );

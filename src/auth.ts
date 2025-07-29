@@ -19,9 +19,9 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign({id:user.id}, SECRET, {expiresIn: '1h'});
-    res.json({ token: token });
+    return res.status(200).json({ token: token });
     
 });
-
-export {router as authRoutes, SECRET};
+ 
+export {router as authRoutes};
 
