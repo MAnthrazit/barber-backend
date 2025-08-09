@@ -1,23 +1,24 @@
 import { initDB } from "./db"; 
 import { Router } from "express";
-import  jwt  from "jsonwebtoken";
-import bcrypt from 'bcryptjs';
-import dotenv from 'dotenv';
+import authenticateToken from "./authToken";
 
-dotenv.config();
-const SECRET : string | undefined = process.env.JWT_SECRET || 'fallback';
 const router : Router = Router();
 
-const auth = async (req:any, res:any, next: any) => {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.sendStatus(401);
-    try {
-        req.user = jwt.verify(token, SECRET);
-        next();
-    } catch {
-        res.sendStatus(403);
-    }
-}
+router.get('/cuts', authenticateToken, async (req, res) => {
+    const db = await initDB();
+    const today : Date = new Date();
+
+    const day_start : Date = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+
+
+    const cuts =  await db.all(
+        `SELECT id, name, timestamp_start, timestamp_end, clients, state FROM events 
+        WHERE timestamp_start > ? `,
+        [day_start.toISOString()]
+    );
+
+    res.status(200).json(cuts);
+})
 
 router.get('/cuts/:date', async (req, res) => {
     const db = await initDB();
@@ -27,29 +28,11 @@ router.get('/cuts/:date', async (req, res) => {
     const day_start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
     const day_end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
 
-    const token : string | undefined = req.headers.authorization?.split(' ')[1];
-    let isAuth : boolean = false;
-    
-    if (token) {
-        try {
-            const decode : any = jwt.verify(token, SECRET);
-            isAuth = true;
-        } catch (err) {
-            console.warn('JWT Error');
-        }
-    } 
-
-    const cuts = isAuth
-        ? await db.all(
-            `SELECT id, name, timestamp_start, timestamp_end, clients, state FROM events 
-            WHERE timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
+    const cuts =  await db.all(
+        `SELECT id, timestamp_start, timestamp_end, clients, state FROM events 
+        WHERE state = 0 AND timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
         [day_start.toISOString(), day_end.toISOString()]
-        )
-        : await db.all(
-            `SELECT id, timestamp_start, timestamp_end, clients, state FROM events 
-            WHERE state = 0 AND timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
-        [day_start.toISOString(), day_end.toISOString()]
-        );
+    );
 
     res.status(200).json(cuts);
 });
@@ -94,7 +77,6 @@ router.post('/cuts', async (req, res) => {
 
 
 });
-
 
 export {router as eventRoutes};
 
