@@ -7,7 +7,7 @@ const router : Router = Router();
 router.get('/cuts', authenticateToken, async (req, res) => {
     const db = await initDB();
     const today : Date = new Date();
-
+    
     const day_start : Date = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
 
 
@@ -24,15 +24,19 @@ router.get('/cuts/:date', async (req, res) => {
     const db = await initDB();
     const date = req.params.date;
 
-    const day : Date = new Date(date);
-    const day_start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0, 0);
-    const day_end = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 23, 59, 59);
+    const [year, month, day] = date.split('-').map(Number);
+
+    const day_start = new Date(year, month - 1, day, 0, 0, 0);
+    const day_end = new Date(year, month - 1, day, 23, 59, 59);
 
     const cuts =  await db.all(
         `SELECT id, timestamp_start, timestamp_end, clients, state FROM events 
-        WHERE state = 0 AND timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
+        WHERE state = 1 AND timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
         [day_start.toISOString(), day_end.toISOString()]
     );
+
+    console.log(day_start.toISOString());
+    console.log(day_end.toISOString());
 
     res.status(200).json(cuts);
 });

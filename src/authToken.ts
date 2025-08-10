@@ -1,7 +1,8 @@
 import jwt from "jsonwebtoken";
 import dotenv from 'dotenv';
+import path from "node:path";
 
-dotenv.config();
+dotenv.config({ path: path.resolve('/data/.env') });
 const SECRET : string = process.env.JWT_SECRET || 'fallback';
 
 function authenticateToken(req : any, res : any, next : any) {

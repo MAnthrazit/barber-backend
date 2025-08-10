@@ -4,9 +4,9 @@ import  jwt  from "jsonwebtoken";
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import authenticateToken from "./authToken";
-import { resolve } from "node:path";
+import path  from "node:path";
 
-dotenv.config();
+dotenv.config({ path: path.resolve('/data/.env') });
 const SECRET : string = process.env.JWT_SECRET || 'fallback';
 const router : Router = Router();
 

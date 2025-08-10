@@ -4,8 +4,9 @@ import bodyParser from "body-parser";
 import { authRoutes } from "./auth";
 import dotenv from 'dotenv';  
 import { eventRoutes } from "./events";
+import path from "node:path";
 
-dotenv.config();
+dotenv.config({ path: path.resolve('/data/.env')})
 
 const PORT : string | undefined = process.env.PORT ||  '443';
 
