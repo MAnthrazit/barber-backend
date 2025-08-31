@@ -5,7 +5,6 @@ import authenticateToken from "./authToken";
 const router : Router = Router();
 const pad = (n: number) => n.toString().padStart(2, '0');
 
-// in case mysql wont take the js isodate format
 const toMySQLDatetime = (date: Date): string => `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`; // 1 based
 
 router.get('/cuts', authenticateToken, async (req, res) => {
@@ -32,8 +31,8 @@ router.get('/cuts/:date', async (req, res) => {
     const [year, month, day] = date.split('-').map(Number);
 
 
-    const day_start = `${year}-${pad(month - 1)}-${pad(day)} 00:00:00`; 
-    const day_end = `${year}-${pad(month - 1)}-${pad(day)} 23:59:59`;
+    const day_start = `${year}-${pad(month + 1)}-${pad(day)} 00:00:00`; 
+    const day_end = `${year}-${pad(month + 1)}-${pad(day)} 23:59:59`;
     
     const [cuts] =  await connection.query(
         `SELECT id, timestamp_start, timestamp_end, clients, state FROM events 
@@ -61,11 +60,10 @@ router.post('/cuts', async (req, res) => {
 
     const day_start_str = `${event_start.getFullYear()}-${pad(event_start.getMonth())}-${pad(event_start.getDate())} 00:00:00`;
     const day_end_str = `${event_start.getFullYear()}-${pad(event_start.getMonth())}-${pad(event_start.getDate())} 23:59:59`;
-
-    await connection.beginTransaction()
     
     try {
     
+        await connection.beginTransaction();
         const [overlap] = await connection.query(
             `SELECT * FROM events
             WHERE timestamp_start BETWEEN ? AND ?
@@ -109,6 +107,64 @@ router.post('/cuts', async (req, res) => {
 
     res.status(201).json({message: 'Event created successfully.'});
 });
+
+router.delete('/cuts/reject/:id', authenticateToken, async (req, res) => {
+    const id = req.params.id;
+
+    const connection = await pool.getConnection();
+
+    try {
+        
+        await connection.beginTransaction();
+        await connection.query(`
+            DELETE FROM events WHERE id = ?`,
+            [id]
+        );
+
+        await connection.commit();
+    } catch (error) {
+        await connection.rollback();
+        console.error('Transaction failed', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    } finally{
+        connection.release();
+    }
+
+    res.status(201).json({message: 'Event successfully deleted'});
+});
+
+
+router.post('/cuts/accept/:id', authenticateToken, async (req, res) => {
+    const id = req.params.id;
+
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        await connection.query(`
+            UPDATE events
+            SET state = 1 WHERE id = ?`, 
+            [id]
+        );
+
+        const [updatedCut] : any[] = await connection.query(`
+            SELECT id, name, timestamp_start, timestamp_end, clients, state FROM events
+            WHERE id = ?`, 
+            [id]
+        )
+        await connection.commit();
+
+        res.status(200).json(updatedCut[0]);
+    } catch (error) {
+        await connection.rollback();
+        console.error('failed: ', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    } finally{
+        connection.release();
+    }
+});
+
 
 export {router as eventRoutes};
 
