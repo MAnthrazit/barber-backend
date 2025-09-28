@@ -116,8 +116,8 @@ router.delete('/cuts/reject/:id', authenticateToken, async (req, res) => {
     try {
         
         await connection.beginTransaction();
-        await connection.query(`
-            DELETE FROM events WHERE id = ?`,
+        await connection.query(
+            `DELETE FROM events WHERE id = ?`,
             [id]
         );
 
@@ -142,14 +142,14 @@ router.post('/cuts/accept/:id', authenticateToken, async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        await connection.query(`
-            UPDATE events
+        await connection.query(
+            `UPDATE events
             SET state = 1 WHERE id = ?`, 
             [id]
         );
 
-        const [updatedCut] : any[] = await connection.query(`
-            SELECT id, name, timestamp_start, timestamp_end, clients, state FROM events
+        const [updatedCut] : any[] = await connection.query(
+            `SELECT id, name, timestamp_start, timestamp_end, clients, state FROM events
             WHERE id = ?`, 
             [id]
         )

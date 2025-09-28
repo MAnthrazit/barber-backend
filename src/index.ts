@@ -4,6 +4,7 @@ import bodyParser from "body-parser";
 import { authRoutes } from "./auth";
 import dotenv from 'dotenv';  
 import { eventRoutes } from "./events";
+import { holidayRoutes } from "./holidays";
 import path from "node:path";
 
 dotenv.config({ path: path.resolve('/data/.env')})
@@ -20,6 +21,7 @@ app.use(cors({
 
 app.use('/api', authRoutes);
 app.use('/api', eventRoutes);
+app.use('/api', holidayRoutes);
 app.listen(9000, '0.0.0.0', () => console.log('Server running on port 9000'));
 
 
