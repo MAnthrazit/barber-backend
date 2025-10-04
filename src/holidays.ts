@@ -9,12 +9,12 @@ const toMySQLDatetime = (date: Date): string => `${date.getFullYear()}-${pad(dat
 
 router.get('/holidays',  async (req, res) => {
     const today : Date = new Date();
-    const dayStartStr = `${today.getFullYear()}-${pad(today.getMonth())}-${pad(today.getDate())} 00:00:00`;
+    const dayStartStr : string = `${today.getFullYear()}-${pad(today.getMonth())}-${pad(today.getDate())} 00:00:00`;
     
 
     const connection = await pool.getConnection();
     try {
-        const [holidays] = await connection.query(
+        const [holidays] = await connection.execute(
             `SELECT id, timestamp_start, timestamp_end
             FROM holidays
             WHERE timestamp_end >= ?`,
@@ -53,7 +53,7 @@ router.post('/holidays', authenticateToken, async (req, res) => {
     try {
         await connection.beginTransaction();
         
-        const [holiday] = await connection.query(
+        const [holiday] = await connection.execute(
             `INSERT into holidays (timestamp_start, timestamp_end)
             VALUES(?,?)`, 
             [holiday_start_str, holiday_end_str]
@@ -75,10 +75,9 @@ router.delete('/holidays/:id', authenticateToken, async (req, res) => {
 
     const connection = await pool.getConnection();
 
-    try {
-        
+    try {        
         await connection.beginTransaction();
-        const [holiday] = await connection.query(`
+        const [holiday] = await connection.execute(`
             DELETE FROM holidays WHERE id = ?`,
             [id]
         );

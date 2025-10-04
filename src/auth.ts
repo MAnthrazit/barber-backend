@@ -19,11 +19,9 @@ router.post('/register', async (req, res) => {
     await connection.beginTransaction();
 
     try {
-        await connection.query(
-            `
-            INSERT INTO users (name, email, password)
-            VALUES(?, ?, ?)
-            `, 
+        await connection.execute(
+            `INSERT INTO users (name, email, password)
+            VALUES(?, ?, ?)`, 
             [
                 name, 
                 email, 
@@ -47,11 +45,10 @@ router.post('/login', async (req, res) => {
     const connection = await pool.getConnection();
     
     try{
-        const [rows] = await connection.query<any[]>(
-            `
-            SELECT * FROM users WHERE email = ?
+        const [rows] = await connection.execute<any[]>(
+            `SELECT * FROM users WHERE email = ?
             `, 
-            [ username]
+            [username]
         );
         
         if (rows.length === 0) {

@@ -11,9 +11,9 @@ router.get('/cuts', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
 
     const today : Date = new Date();
-    const dayStartStr = `${today.getFullYear()}-${pad(today.getMonth())}-${pad(today.getDate())} 00:00:00`;
+    const dayStartStr : string = `${today.getFullYear()}-${pad(today.getMonth())}-${pad(today.getDate())} 00:00:00`;
 
-    const [cuts] = await connection.query(
+    const [cuts] = await connection.execute(
         `SELECT id, name, timestamp_start, timestamp_end, clients, state
         FROM events
         WHERE timestamp_start > ?`,
@@ -26,31 +26,35 @@ router.get('/cuts', authenticateToken, async (req, res) => {
 router.get('/cuts/:date', async (req, res) => {
     const date = req.params.date;
 
-    const connection = await pool.getConnection();
-
     const [year, month, day] = date.split('-').map(Number);
 
 
-    const day_start = `${year}-${pad(month + 1)}-${pad(day)} 00:00:00`; 
-    const day_end = `${year}-${pad(month + 1)}-${pad(day)} 23:59:59`;
+    const day_start : string = `${year}-${pad(month + 1)}-${pad(day)} 00:00:00`; 
+    const day_end : string = `${year}-${pad(month + 1)}-${pad(day)} 23:59:59`;
     
-    const [cuts] =  await connection.query(
-        `SELECT id, timestamp_start, timestamp_end, clients, state FROM events 
-        WHERE state = 1 AND timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
-        [day_start, day_end]
-    );
+    const connection = await pool.getConnection();
+    try{
+        const [cuts] =  await connection.execute(
+            `SELECT id, timestamp_start, timestamp_end, clients, state FROM events 
+            WHERE state = 1 AND timestamp_start BETWEEN ? AND ? ORDER BY timestamp_start`,
+                [day_start, day_end]
+        );
+
+        res.status(200).json(cuts);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
 
     console.log(day_start);
     console.log(day_end);
-
-    res.status(200).json(cuts);
 });
 
 
 router.post('/cuts', async (req, res) => {
     const {name, email, timestamp_start, timestamp_end, clients, comment} = req.body;
-
-    const connection = await pool.getConnection();
     
     const event_start = new Date(timestamp_start);
     const event_end = new Date(timestamp_end);
@@ -58,13 +62,34 @@ router.post('/cuts', async (req, res) => {
     const event_start_str : string = toMySQLDatetime(event_start);
     const event_end_str : string = toMySQLDatetime(event_end); 
 
-    const day_start_str = `${event_start.getFullYear()}-${pad(event_start.getMonth())}-${pad(event_start.getDate())} 00:00:00`;
-    const day_end_str = `${event_start.getFullYear()}-${pad(event_start.getMonth())}-${pad(event_start.getDate())} 23:59:59`;
+    const day_start_str : string = `${event_start.getFullYear()}-${pad(event_start.getMonth())}-${pad(event_start.getDate())} 00:00:00`;
+    const day_end_str : string = `${event_start.getFullYear()}-${pad(event_start.getMonth())}-${pad(event_start.getDate())} 23:59:59`;
     
+    
+    const connection = await pool.getConnection();
+
     try {
-    
         await connection.beginTransaction();
-        const [overlap] = await connection.query(
+        
+        const [holidayOverlap] = await connection.execute(
+            `SELECT * FROM holidays
+            WHERE timestamp_start BETWEEN ? AND ?
+            AND timestamp_start < ?
+            AND timestamp_end > ?`,
+            [
+                day_start_str,
+                day_end_str,
+                event_end_str,
+                event_start_str
+            ]
+        );
+
+        if ((holidayOverlap as any[]).length > 0){
+            await connection.rollback();
+            return res.status(409).json({ message: 'Overlapping appointment exists on this day.' });
+        }
+
+        const [cutOverlap] = await connection.execute(
             `SELECT * FROM events
             WHERE timestamp_start BETWEEN ? AND ?
             AND timestamp_start < ?
@@ -77,12 +102,12 @@ router.post('/cuts', async (req, res) => {
             ]
         );    
 
-        if ((overlap as any[]).length > 0){
+        if ((cutOverlap as any[]).length > 0){
             await connection.rollback();
             return res.status(409).json({ message: 'Overlapping appointment exists on this day.' });
         }
 
-        await connection.query(
+        const [request] = await connection.execute(
             `INSERT INTO events (name, email, timestamp_start, timestamp_end, clients, comment, state)
             VALUES(?,?,?,?,?,?,?)`,
             [
@@ -97,6 +122,7 @@ router.post('/cuts', async (req, res) => {
         );
 
         await connection.commit();
+        res.status(201).json({ message: 'Request created successfully.', id: (request as any).insertId});
     } catch (error) {
         await connection.rollback();
         console.error('Transaction failed:', error);
@@ -104,8 +130,6 @@ router.post('/cuts', async (req, res) => {
     } finally {
         connection.release();
     }
-
-    res.status(201).json({message: 'Event created successfully.'});
 });
 
 router.delete('/cuts/reject/:id', authenticateToken, async (req, res) => {
@@ -114,14 +138,14 @@ router.delete('/cuts/reject/:id', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
 
     try {
-        
         await connection.beginTransaction();
-        await connection.query(
+        await connection.execute(
             `DELETE FROM events WHERE id = ?`,
             [id]
         );
 
         await connection.commit();
+        res.status(200).json({message: 'Event successfully deleted'});
     } catch (error) {
         await connection.rollback();
         console.error('Transaction failed', error);
@@ -129,8 +153,6 @@ router.delete('/cuts/reject/:id', authenticateToken, async (req, res) => {
     } finally{
         connection.release();
     }
-
-    res.status(201).json({message: 'Event successfully deleted'});
 });
 
 
@@ -138,23 +160,20 @@ router.post('/cuts/accept/:id', authenticateToken, async (req, res) => {
     const id = req.params.id;
 
     const connection = await pool.getConnection();
-
     try {
         await connection.beginTransaction();
-
-        await connection.query(
+        await connection.execute(
             `UPDATE events
             SET state = 1 WHERE id = ?`, 
             [id]
         );
 
-        const [updatedCut] : any[] = await connection.query(
+        const [updatedCut] : any[] = await connection.execute(
             `SELECT id, name, timestamp_start, timestamp_end, clients, state FROM events
             WHERE id = ?`, 
             [id]
         )
         await connection.commit();
-
         res.status(200).json(updatedCut[0]);
     } catch (error) {
         await connection.rollback();
@@ -164,7 +183,6 @@ router.post('/cuts/accept/:id', authenticateToken, async (req, res) => {
         connection.release();
     }
 });
-
 
 export {router as eventRoutes};
 
